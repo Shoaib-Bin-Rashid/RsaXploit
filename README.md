@@ -2,6 +2,8 @@
 
 **The Ultimate RSA Attack Framework for CTF & Security Research**
 
+**Developed by Shoaib Bin Rashid (R3D\_XplOiT)**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/shoaibsr7/RSAXploit)
