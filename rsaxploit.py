@@ -205,6 +205,34 @@ def parse_cipher_auto(s: str) -> int:
     
     raise ValueError(f"Cannot parse value in any known format: {s!r}")
 
+# ---------- parsing helpers ----------
+COMMON_CIPHER_NAMES = {
+    # extremely common
+    "c", "ct", "cipher", "ciphertext", "enc", "encrypted", "ciphered", "encdata", "encmsg",
+    # numbered variants and short forms
+    "c1", "c2", "c3", "cipher1", "cipher2", "cipher3", "enc1", "enc2",
+    # CTF-style names
+    "flag", "flag_enc", "enc_flag", "message", "msg", "payload", "data", "encoded",
+    "output", "secret", "cryptogram", "cipher_msg", "encrypted_msg", "secret_msg",
+    # common labels for encoded blobs
+    "b64", "base64", "hex", "hexdata", "binary", "txt", "text", "value", "val",
+}
+
+def _is_cipher_name(name: str) -> bool:
+    """Return True if a variable name looks like a ciphertext/cipher blob."""
+    if not name:
+        return False
+    lname = name.lower()
+    if lname in COMMON_CIPHER_NAMES:
+        return True
+    # fuzzy heuristics
+    if lname.startswith("cipher") or lname.startswith("enc") or lname.startswith("ct") or "cipher" in lname or "enc" in lname:
+        return True
+    if lname.endswith("_enc") or lname.endswith("enc") or lname.endswith("_ct"):
+        return True
+    return False
+
+
 def split_arg_tokens(arg_values: Optional[List[str]]) -> List[str]:
     """
     Accepts argparse token list (nargs='+') and splits comma-separated items,
@@ -689,31 +717,27 @@ class KnownSumAttack(Attack):
                 log.debug(f"[known_sum] cannot parse x: {x_raw}: {ex}")
                 return AttackResult(self.name, False, info="x-parse")
 
-        # Solve quadratic depending on expected relation.
-        # The snippet you showed solved for p,q using:
-        #   p and q are roots of t^2 + x*t - n = 0  (verify algebra)
-        # delta = x^2 - 4*n
+        # Solve for p and q where x = p + q and n = p * q
+        # Using the exact picoCTF logic: delta = x^2 - 4*(-1)*(-n) = x^2 - 4*n
         delta = x_val * x_val - 4 * k.n
         if delta < 0:
             return AttackResult(self.name, False, info="delta-neg")
         # integer sqrt
         if gmpy2:
-            s = int(gmpy2.isqrt(delta))
+            d_sqrt = int(gmpy2.isqrt(delta))
         else:
-            s = int(math.isqrt(delta))
-        if s * s != delta:
+            d_sqrt = int(math.isqrt(delta))
+        if d_sqrt * d_sqrt != delta:
             return AttackResult(self.name, False, info="delta-not-square")
-        # compute roots — match your snippet's signs
-        p = (x_val - s) // 2
-        q = (x_val + s) // 2
+        
+        # Use the exact picoCTF formula
+        # p = (-x + d_sqrt) // -2 = (x - d_sqrt) // 2
+        # q = (-x - d_sqrt) // -2 = (x + d_sqrt) // 2
+        p = (-x_val + d_sqrt) // -2
+        q = (-x_val - d_sqrt) // -2
+        
         if p <= 1 or q <= 1 or p * q != k.n:
-            # try swapped sign just in case
-            p_alt = ( - x_val - s ) // -2
-            q_alt = ( - x_val + s ) // -2
-            if p_alt > 1 and q_alt > 1 and p_alt * q_alt == k.n:
-                p, q = p_alt, q_alt
-            else:
-                return AttackResult(self.name, False, info="roots-bad")
+            return AttackResult(self.name, False, info="roots-bad")
 
         try:
             phi = (p - 1) * (q - 1)
@@ -1325,16 +1349,20 @@ def _extract_pem_blocks(text: str) -> List[str]:
 def _find_keyvals_in_text(text: str) -> List[Tuple[str, str, int]]:
     """
     Ultra-flexible parser for key-value pairs. Supports:
-    - Various separators: =, :, ->, =>, |, space
+    - Various separators: =, :, ->, =>, |, space-only
     - Comments: #, //, /* */
     - Quoted values: "...", '...'
     - Multi-line values
     - JSON-like syntax: {"n": "123"}
     - Variable names with any characters
+    - Comma/space separated values: e = 3,3,3 or e = 3 3 3
+    - Base64 data
+    - Flexible whitespace
     """
     out = []
     lines = text.splitlines()
     i = 0
+    
     while i < len(lines):
         ln = lines[i].strip()
         
@@ -1343,65 +1371,133 @@ def _find_keyvals_in_text(text: str) -> List[Tuple[str, str, int]]:
             i += 1
             continue
             
-        # Skip comments
+        # Skip lines that look like PEM content (base64 data lines within PEM blocks)
+        # Check if we're inside a PEM block by looking for preceding BEGIN line
+        is_in_pem_block = False
+        for j in range(max(0, i-10), i):
+            if j < len(lines) and lines[j].strip().startswith('-----BEGIN'):
+                # Found a BEGIN line recently, check if we haven't seen an END yet
+                for k in range(j+1, i+1):
+                    if k < len(lines) and lines[k].strip().startswith('-----END'):
+                        break
+                else:
+                    # No END found between BEGIN and current line
+                    is_in_pem_block = True
+                break
+        
+        if is_in_pem_block and re.match(r'^[A-Za-z0-9+/]{40,}={0,2}$', ln.strip()):
+            i += 1
+            continue
+            
+        # Skip pure comment lines
         if ln.startswith("#") or ln.startswith("//") or ln.startswith("/*"):
             i += 1
             continue
+            
+        # Remove inline comments
+        clean_line = ln
+        # Remove /* */ comments
+        clean_line = re.sub(r'/\*.*?\*/', '', clean_line)
+        # Remove // comments (but preserve in base64/hex)
+        if '//' in clean_line and not re.search(r'[A-Za-z0-9+/=]{20,}', clean_line):
+            clean_line = re.sub(r'//.*$', '', clean_line)
+        # Remove # comments (but preserve in hex)
+        if '#' in clean_line and not clean_line.strip().startswith('0x'):
+            clean_line = re.sub(r'#.*$', '', clean_line)
+            
+        clean_line = clean_line.strip()
+        if not clean_line:
+            i += 1
+            continue
         
-        # Try multiple parsing patterns (most flexible first)
+        # Enhanced parsing patterns (most specific to least specific)
         patterns = [
-            # Standard: name = value, name: value
+            # Standard separators: name = value, name: value
             r'\s*([A-Za-z0-9_\-\.]+)\s*[:=]\s*(.+)$',
-            # Arrow style: name -> value, name => value  
+            # Arrow styles: name -> value, name => value
             r'\s*([A-Za-z0-9_\-\.]+)\s*[-=]>\s*(.+)$',
             # Pipe style: name | value
             r'\s*([A-Za-z0-9_\-\.]+)\s*\|\s*(.+)$',
-            # Space separated: name value (if value looks like number/hex)
-            r'\s*([A-Za-z0-9_\-\.]+)\s+([0-9A-Fa-fxX\+\=/]{4,})\s*$',
-            # JSON-like: "name": "value"
-            r'\s*["\']?([A-Za-z0-9_\-\.]+)["\']?\s*[:]\s*["\']?([^"\',}]+)["\']?',
-            # Loose match: any word followed by potential value
-            r'\s*([A-Za-z0-9_\-\.]+)[^A-Za-z0-9]*([0-9A-Fa-fxX\+\=/]{8,}).*$'
+            # Space-only separation (if value looks like data)
+            r'\s*([A-Za-z0-9_\-\.]+)\s+([0-9A-Fa-fxX\+\=/,\s]{4,})\s*$',
+            # JSON-like: "name": "value" or name: value
+            r'\s*["\']?([A-Za-z0-9_\-\.]+)["\']?\s*[:=]\s*["\']?([^"\',}\n]+)["\']?',
         ]
         
         matched = False
         for pattern in patterns:
-            m = re.match(pattern, ln)
+            m = re.match(pattern, clean_line, re.IGNORECASE)
             if m:
                 name = m.group(1).strip()
                 val = m.group(2).strip()
                 
-                # Clean up value (remove quotes, trailing punctuation)
-                val = re.sub(r'^["\'](.+)["\']$', r'\1', val)  # Remove quotes
-                val = re.sub(r'[,;\s]*$', '', val)  # Remove trailing punctuation
+                # Clean up the value
+                # Remove quotes
+                val = re.sub(r'^["\'](.+)["\']$', r'\1', val)
+                # Remove trailing punctuation/commas
+                val = re.sub(r'[,;\s]*$', '', val)
                 
-                # Handle multi-line values (if next line looks like continuation)
+                # Handle multi-line values (continuation lines)
+                original_i = i
                 j = i + 1
-                while j < len(lines) and lines[j].strip() and not re.match(r'^\s*[A-Za-z0-9_\-\.]+\s*[:=]', lines[j]):
-                    continuation = lines[j].strip()
-                    if continuation and not continuation.startswith('#'):
-                        val += ' ' + continuation
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    # Stop if empty line or looks like new key-value pair
+                    if not next_line:
+                        break
+                    if re.match(r'^\s*[A-Za-z0-9_\-\.]+\s*[:=]', next_line):
+                        break
+                    if next_line.startswith('#') or next_line.startswith('//'):
+                        j += 1
+                        continue
+                    
+                    # This looks like a continuation
+                    val += ' ' + next_line
                     j += 1
-                i = j - 1  # Update loop counter
+                    
+                i = j - 1  # Update main loop counter
                 
                 if name and val:
-                    out.append((name, val, i+1))
+                    out.append((name, val, original_i + 1))
                     matched = True
                     break
         
-        # If no pattern matched, try to extract any number sequences
+        # Fallback: try to extract standalone data that might be values
         if not matched:
-            # Look for standalone numbers that might be values
-            numbers = re.findall(r'(?:0x)?[0-9A-Fa-f]{8,}', ln)
-            if numbers and len(numbers) <= 3:  # Likely n, e, c
-                # Create synthetic names
-                for idx, num in enumerate(numbers):
-                    synthetic_name = ['n', 'e', 'c'][idx] if idx < 3 else f'value{idx}'
-                    out.append((synthetic_name, num, i+1))
+            # Look for sequences of hex/base64-like data
+            potential_values = []
+            
+            # Check for hex numbers (0x...)
+            hex_matches = re.findall(r'0x[0-9A-Fa-f]+', clean_line)
+            potential_values.extend(hex_matches)
+            
+            # Check for large decimal numbers
+            dec_matches = re.findall(r'\b\d{8,}\b', clean_line)
+            potential_values.extend(dec_matches)
+            
+            # Check for base64-like strings
+            b64_matches = re.findall(r'[A-Za-z0-9+/]{20,}={0,2}', clean_line)
+            potential_values.extend(b64_matches)
+            
+            # If we found potential values, assign generic names
+            if potential_values and len(potential_values) <= 5:
+                for idx, val in enumerate(potential_values):
+                    # Try to guess the variable name based on content/position
+                    if val.startswith('0x') and len(val) > 100:
+                        synthetic_name = 'n' if idx == 0 else f'n{idx}'
+                    elif val.isdigit() and len(val) < 10:
+                        synthetic_name = 'e' if idx == 0 else f'e{idx}'
+                    elif re.match(r'[A-Za-z0-9+/=]+$', val) and len(val) > 20:
+                        synthetic_name = 'c' if idx == 0 else f'c{idx}'
+                    else:
+                        synthetic_name = f'value{idx}'
+                    
+                    out.append((synthetic_name, val, i + 1))
         
         i += 1
     
     return out
+
 
 def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
     """
@@ -1428,7 +1524,13 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
             # Single object with RSA parameters
             n_val = json_data.get('n') or json_data.get('modulus') or json_data.get('N')
             e_val = json_data.get('e') or json_data.get('exponent') or json_data.get('E') or 65537
-            c_val = json_data.get('c') or json_data.get('ciphertext') or json_data.get('encrypted')
+            # Try multiple cipher variable names for JSON
+            cipher_names = tuple(COMMON_CIPHER_NAMES)
+            c_val = None
+            for name in cipher_names:
+                if json_data.get(name):
+                    c_val = json_data.get(name)
+                    break
             x_val = json_data.get('x') or json_data.get('sum')
             
             if n_val and e_val:
@@ -1454,7 +1556,14 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
                     try:
                         n_val = item.get('n') or item.get('modulus')
                         e_val = item.get('e') or item.get('exponent') or 65537
-                        c_val = item.get('c') or item.get('ciphertext')
+                        # Try multiple cipher variable names for JSON array items
+                        cipher_names = tuple(COMMON_CIPHER_NAMES)
+
+                        c_val = None
+                        for name in cipher_names:
+                            if item.get(name):
+                                c_val = item.get(name)
+                                break
                         
                         if n_val:
                             n_int = parse_int_auto(str(n_val)) if isinstance(n_val, str) else int(n_val)
@@ -1495,12 +1604,51 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
     if not kvs:
         return keys, c_list
 
-    # helper: split comma/space-separated multi-values
+    # helper: split comma/space-separated multi-values with enhanced flexibility
     def _split_multi(val: str) -> List[str]:
-        # replace newlines and split on commas or whitespace, preserve tokens like "0x..." or base64
-        cleaned = val.replace("\r", " ").replace("\n", " ")
-        parts = re.split(r"[,\s]+", cleaned.strip())
-        return [p.strip() for p in parts if p.strip()]
+        """
+        Enhanced splitting for various formats:
+        - e = 3,3,3
+        - e = 3 3 3  
+        - c = value1,value2,value3
+        - n1 = 44,66,33
+        - Mixed formats
+        """
+        # Clean up the value first
+        cleaned = val.replace("\r", " ").replace("\n", " ").strip()
+        
+        # Handle different separation patterns
+        parts = []
+        
+        # If it contains commas, split on commas first
+        if ',' in cleaned:
+            comma_parts = [p.strip() for p in cleaned.split(',') if p.strip()]
+            for part in comma_parts:
+                # Further split each comma-separated part on whitespace if needed
+                if ' ' in part and not re.match(r'^0x[0-9A-Fa-f]+$', part.strip()):
+                    # This might be space-separated values within a comma group
+                    sub_parts = [sp.strip() for sp in re.split(r'\s+', part) if sp.strip()]
+                    parts.extend(sub_parts)
+                else:
+                    parts.append(part)
+        else:
+            # No commas, split on whitespace but preserve hex values and base64
+            # Special handling for hex values, base64, and other structured data
+            if re.match(r'^0x[0-9A-Fa-f]+$', cleaned.strip()):
+                # Single hex value
+                parts = [cleaned.strip()]
+            elif re.match(r'^[A-Za-z0-9+/=]{20,}$', cleaned.strip()):
+                # Single base64-like value
+                parts = [cleaned.strip()]
+            elif re.match(r'^\d{4,}$', cleaned.strip()):
+                # Single large number
+                parts = [cleaned.strip()]
+            else:
+                # Split on whitespace
+                parts = [p.strip() for p in re.split(r'\s+', cleaned) if p.strip()]
+        
+        # Filter out empty parts and return
+        return [p for p in parts if p]
 
     # Determine whether numbered style is used anywhere (n1 / e_1 / c1)
     numbered = False
@@ -1548,6 +1696,11 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
                     global_e = int(global_group['e'][0], 16)
                 except Exception:
                     global_e = None
+        
+        # Also handle global x for Known Sum attacks
+        global_x = None
+        if 'x' in global_group and global_group['x']:
+            global_x = global_group['x'][0]
 
         # now for each numeric index create entries (skip index 0 here)
         for idx in sorted(k for k in groups.keys() if k != 0):
@@ -1566,17 +1719,27 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
                 e_token = g['e'][0]
             elif global_e is not None:
                 e_token = str(global_group.get('e')[0])
+            
+            # pick x: prefer per-index x, otherwise fall back to global_x (if exists)
+            x_token = None
+            if 'x' in g and g['x']:
+                x_token = g['x'][0]
+            elif global_x is not None:
+                x_token = global_x
 
             # collect cipher variants for this index (support multiple names)
             cipher_vals: List[str] = []
-            for cname in ('c', 'c1', 'ciphertext', 'cipher', 'encrypted', 'enc'):
+            cipher_names = tuple(COMMON_CIPHER_NAMES)
+
+            for cname in cipher_names:
                 if cname in g:
                     cipher_vals.extend(g[cname])
 
             # also include any key named something-with-digits that looks like ciphertext
             for kn, vals in g.items():
-                if kn not in ('n', 'e', 'c', 'c1', 'ciphertext', 'cipher', 'encrypted', 'enc'):
-                    # if key contains digits but isn't pure letters, consider its values as candidate ciphers
+                # Create exclusion set from the same cipher_names used above
+                excluded_names = set(x.lower() for x in cipher_names) | {'n', 'e'}
+                if kn.lower() not in excluded_names:
                     if re.search(r'\d', kn):
                         for v in vals:
                             if re.fullmatch(r'[0-9A-Fa-fxX\+\=/]+', v):
@@ -1604,8 +1767,11 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
                     else:
                         e_val = global_e if global_e is not None else 65537
 
-                    # finally append PubKey
-                    keys.append(PubKey(n=n_val, e=e_val, label=f"{os.path.basename(path)}:idx{idx}"))
+                    # finally append PubKey with x if available
+                    extras = {}
+                    if x_token:
+                        extras['x'] = x_token
+                    keys.append(PubKey(n=n_val, e=e_val, label=f"{os.path.basename(path)}:idx{idx}", extras=extras if extras else None))
 
                     # attach any ciphers for this index (support multi-values)
                     for cv in cipher_vals:
@@ -1626,7 +1792,8 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
         # also handle any global-only ciphers (index 0)
         if 0 in groups:
             g0 = groups[0]
-            for cname in ('c', 'c1', 'ciphertext', 'cipher', 'encrypted', 'enc'):
+            cipher_names = tuple(COMMON_CIPHER_NAMES)
+            for cname in cipher_names:
                 if cname in g0:
                     for cv in g0[cname]:
                         for sub in _split_multi(cv):
@@ -1640,18 +1807,19 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
     # else: non-numbered style -> split text into groups by blank lines and parse each group
     groups_text = [g.strip() for g in re.split(r'\n\s*\n', txt) if g.strip()]
     for gidx, gtext in enumerate(groups_text):
-        # skip if group contains only PEM block (already handled)
-        if '-----BEGIN' in gtext and '-----END' in gtext:
-            # maybe there's PEM plus a following c= line in same group -> we still parse kvs inside
-            pass
         # gather kvs in this group
         group_kvs = _find_keyvals_in_text(gtext)
         if not group_kvs:
             continue
+            
+        # Check if this group is PEM-only (skip key processing but still check for ciphers)
+        is_pem_only = '-----BEGIN' in gtext and '-----END' in gtext and len(group_kvs) == 0
+        if is_pem_only:
+            continue
+            
         n_token = None
         e_token = None
         x_token = None
-        cipher_vals: List[str] = []
         # support multi-valued RHSs by flattening them into tokens
         group_n_tokens: List[str] = []
         group_e_tokens: List[str] = []
@@ -1665,23 +1833,37 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
             # Ultra-flexible variable name recognition
             def is_n_like(name_str):
                 """Check if variable name refers to modulus n"""
-                patterns = ['n', 'modulus', 'mod', 'public_key', 'pubkey', 'pk', 'rsa_n', 'modulo']
+                # Check for exact 'n' first, then other specific patterns
+                if name_str == 'n':
+                    return True
+                patterns = ['modulus', 'mod', 'public_key', 'pubkey', 'pk', 'rsa_n', 'modulo']
                 return any(pattern in name_str for pattern in patterns) or name_str.startswith('n')
             
             def is_e_like(name_str):
                 """Check if variable name refers to exponent e"""
-                patterns = ['e', 'exp', 'exponent', 'public_exp', 'pub_exp', 'rsa_e', 'key_exp']
-                return any(pattern in name_str for pattern in patterns) or name_str.startswith('e')
+                # Check for exact 'e' first
+                if name_str == 'e':
+                    return True
+                # Check specific exponent patterns, but avoid cipher-related words starting with 'e'
+                patterns = ['exp', 'exponent', 'public_exp', 'pub_exp', 'rsa_e', 'key_exp']
+                return any(pattern in name_str for pattern in patterns)
             
             def is_c_like(name_str):
                 """Check if variable name refers to ciphertext c"""
-                patterns = ['c', 'cipher', 'ciphertext', 'encrypted', 'enc', 'cyphertext', 
-                           'message', 'msg', 'ct', 'crypto', 'secret', 'flag', 'output']
+                patterns = [
+                    'c', 'cipher', 'ciphertext', 'encrypted', 'enc', 'encrypt',
+                    'cyphertext', 'cypher', 'message', 'msg', 'ct', 'secret', 'flag',
+                    'output', 'data', 'target', 'payload', 'text', 'value'
+                ]
                 return any(pattern in name_str for pattern in patterns) or name_str.startswith('c')
+
             
             def is_x_like(name_str):
                 """Check if variable name refers to sum/difference x"""
-                patterns = ['x', 'sum', 's', 'diff', 'difference', 'p_plus_q', 'p+q', 'pq_sum']
+                # Check for exact 'x' and 's' first, then other specific patterns  
+                if name_str in ['x', 's']:
+                    return True
+                patterns = ['sum', 'diff', 'difference', 'p_plus_q', 'p+q', 'pq_sum']
                 return any(pattern in name_str for pattern in patterns)
             
             # Classify variable based on flexible matching
@@ -1707,46 +1889,44 @@ def parse_input_file(path: str, log) -> Tuple[List[PubKey], List[int]]:
                     else:
                         group_c_tokens.extend(tokens)
 
-        # Now handle sequences: if there are multiple n/e/c tokens in the group,
-        # pair them positionally; if counts differ, missing entries default to None/e=65537.
-        max_len = max(len(group_n_tokens), len(group_e_tokens), len(group_c_tokens))
-        if max_len == 0:
-            continue
-
-        for i in range(max_len):
-            n_val = None
-            if i < len(group_n_tokens):
-                try:
-                    n_val = parse_int_auto(group_n_tokens[i])
-                except Exception:
+        # Create keys if we have n/e tokens
+        max_len = max(len(group_n_tokens), len(group_e_tokens), 0)
+        if max_len > 0:
+            for i in range(max_len):
+                n_val = None
+                if i < len(group_n_tokens):
                     try:
-                        n_val = int(group_n_tokens[i], 16)
+                        n_val = parse_int_auto(group_n_tokens[i])
                     except Exception:
-                        n_val = None
-            e_val = None
-            if i < len(group_e_tokens):
-                try:
-                    e_val = parse_int_auto(group_e_tokens[i])
-                except Exception:
+                        try:
+                            n_val = int(group_n_tokens[i], 16)
+                        except Exception:
+                            n_val = None
+                e_val = None
+                if i < len(group_e_tokens):
                     try:
-                        e_val = int(group_e_tokens[i], 16)
+                        e_val = parse_int_auto(group_e_tokens[i])
                     except Exception:
-                        e_val = None
-            if e_val is None:
-                e_val = 65537
+                        try:
+                            e_val = int(group_e_tokens[i], 16)
+                        except Exception:
+                            e_val = None
+                if e_val is None:
+                    e_val = 65537
 
-            if n_val is not None:
-                extras = {}
-                if x_token:
-                    extras['x'] = x_token
-                keys.append(PubKey(n=n_val, e=e_val, label=f"{os.path.basename(path)}:g{gidx}", extras=extras if extras else None))
+                # Create key if we have n value
+                if n_val is not None:
+                    extras = {}
+                    if x_token:
+                        extras['x'] = x_token
+                    keys.append(PubKey(n=n_val, e=e_val, label=f"{os.path.basename(path)}:g{gidx}", extras=extras if extras else None))
 
-            # cipher token at same position appended as ciphertext
-            if i < len(group_c_tokens):
-                try:
-                    c_list.append(parse_cipher_auto(group_c_tokens[i]))
-                except Exception:
-                    pass
+        # Process all cipher tokens (works with or without keys in same group)
+        for cipher_token in group_c_tokens:
+            try:
+                c_list.append(parse_cipher_auto(cipher_token))
+            except Exception:
+                pass
 
     return keys, c_list
 
@@ -1764,6 +1944,7 @@ Examples:
   python3 rsaxploit.py --publickey pub1.pem,pub2.pem --decrypt "c1,c2"
   python3 rsaxploit.py -n "N1,N2" -e "3,65537" --decrypt "C1,C2"
   python3 rsaxploit.py -n N -e 65537 --decrypt C --flag-format "FLAG\\{{.*?\\}}"
+  python3 rsaxploit.py -n N -e 65537 -x sum_of_primes --decrypt C --attack known_sum
 
 Available attacks: [{attack_names}]
 
@@ -1776,6 +1957,7 @@ To test all attacks: {Colors.YELLOW}{Colors.BOLD}./test.sh{Colors.RESET}
     p.add_argument("--publickey", help="PEM path(s), comma-separated or wildcard", default=None)
     p.add_argument("-n", nargs="+", help="modulus N (dec/hex) or comma-separated list", default=None)
     p.add_argument("-e", nargs="+", help="exponent e (dec/hex) or comma-separated list", default=None)
+    p.add_argument("-x", "--x", help="sum of primes p+q (dec/hex) for known_sum attack", default=None)
     p.add_argument("--decrypt", nargs="+", help="ciphertext(s) dec/hex/base64, comma-separated or space-separated", default=None)
     p.add_argument("--attack", help="limit to one or more attacks (comma-separated)", default=None)
     p.add_argument("--flag-format", help="regex for stopping when plaintext matches", default=None)
@@ -1815,7 +1997,7 @@ def load_keys_from_pem(paths: List[str], log) -> List[PubKey]:
             log.warning(f"Could not parse PEM {p}: {ex}")
     return out
 
-def make_keys_from_ne(n_tokens: List[str], e_tokens: Optional[List[str]], log) -> List[PubKey]:
+def make_keys_from_ne(n_tokens: List[str], e_tokens: Optional[List[str]], x_token: Optional[str], log) -> List[PubKey]:
     Ns = [parse_int_auto(t) for t in n_tokens] if n_tokens else []
     Es = [parse_int_auto(t) for t in e_tokens] if e_tokens else []
 
@@ -1838,7 +2020,10 @@ def make_keys_from_ne(n_tokens: List[str], e_tokens: Optional[List[str]], log) -
 
     keys = []
     for i, (n, e) in enumerate(zip(Ns, Es)):
-        keys.append(PubKey(n=n, e=e, label=f"N#{i}"))
+        extras = {}
+        if x_token:
+            extras['x'] = x_token
+        keys.append(PubKey(n=n, e=e, label=f"N#{i}", extras=extras if extras else None))
         log.debug(f"Loaded key {i}: n={n}, e={e}")
     return keys
 
@@ -1951,7 +2136,7 @@ def main():
     n_tokens = split_arg_tokens(args.n)
     e_tokens = split_arg_tokens(args.e)
     if n_tokens:
-        keys.extend(make_keys_from_ne(n_tokens, e_tokens, log))
+        keys.extend(make_keys_from_ne(n_tokens, e_tokens, args.x, log))
 
     if not keys:
         log.error(Colors.RED + "No public keys provided. Use --publickey or -n/-e or provide an input file." + Colors.RESET)

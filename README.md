@@ -1,64 +1,124 @@
-# RSAXploit
+# 🔐 RSAXploit
 
-**The Ultimate RSA Attack Framework for CTF & Security Testing**
+**The Ultimate RSA Attack Framework for CTF & Security Research**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](https://github.com/shoaibsr7/RSAXploit)
+[![Attacks](https://img.shields.io/badge/attacks-15+-red.svg)](#-attack-arsenal)
+[![Variables](https://img.shields.io/badge/cipher_variables-19+-green.svg)](#-variable-names-supported)
 
-RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed specifically for CTF competitions and security research. It features 14+ advanced attack methods, ultra-flexible input parsing, and a professional UI with real-time progress tracking.
+RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed specifically for **CTF competitions** and **security research**. It features **15+ advanced attack methods**, **ultra-flexible input parsing**, and a **professional CLI interface** with real-time progress tracking.
+
+**🎯 Perfect for CTF players, security researchers, and cryptography enthusiasts!**
 
 ## 🚀 Features
 
-### **Advanced Attack Arsenal**
-- **Small Root Attack** - When message^e < n
-- **Coppersmith Attack** - Stereotyped messages & polynomial roots
-- **Wiener Attack** - Small private exponents  
-- **Common Modulus** - Same n, different e values
-- **Håstad's Broadcast** - Same e, different n values
-- **Shared Prime (GCD)** - Multiple keys with common factors
-- **Trial Division** - Small prime factorization
-- **Fermat Attack** - Close prime factors
-- **Pollard's ρ & p-1** - Advanced factorization
-- **Known Sum Attack** - When p+q is known
-- **Polynomial Guess** - Custom polynomial attacks
-- **FactorDB Integration** - Online factorization database
+### **💪 Advanced Attack Arsenal**
+- **⚡ Small Root Attack** - When message^e < n
+- **🔮 Coppersmith Attack** - Stereotyped messages & polynomial roots
+- **💰 Wiener Attack** - Small private exponents (continued fractions)
+- **🔄 Common Modulus** - Same n, different e values
+- **📡 Håstad's Broadcast** - Same e, different n values (CRT)
+- **🤝 Shared Prime (GCD)** - Multiple keys with common factors
+- **🔢 Trial Division** - Small prime factorization
+- **⚖️ Fermat Attack** - Close prime factors (p ≈ q)
+- **🎲 Pollard's ρ & p-1** - Advanced factorization algorithms
+- **➕ Known Sum Attack** - When p+q is known
+- **📏 Polynomial Guess** - Custom polynomial attacks
+- **🏦 FactorDB Integration** - Online factorization database
+- **🔍 Multi-Prime Support** - n = p₁ × p₂ × ... × pₖ
+- **🔄 Batch Processing** - Multiple keys/ciphers simultaneously
+- **🏆 CTF Optimized** - Priority-based attack ordering
 
-### **Ultra-Flexible Input Parsing**
-- **Multiple formats**: PEM, JSON, key-value pairs, numbered variables
-- **Any separator**: `=`, `:`, `->`, `=>`, `|`, spaces
-- **Number formats**: Decimal, hex, binary, octal, base64, scientific notation
-- **Variable names**: Flexible recognition (n/modulus/pk, e/exp, c/cipher/encrypted)
-- **Comments**: Support for `#`, `//`, `/* */` style comments
+### **🌐 Ultra-Flexible Input Parsing**
+- **📁 Multiple formats**: PEM, JSON, key-value pairs, numbered variables
+- **⚔️ Any separator**: `=`, `:`, `->`, `=>`, `|`, spaces, tabs
+- **🔢 Number formats**: Decimal, hex (0x), binary (0b), octal (0o), base64, scientific
+- **🏷️ Variable names**: 19+ cipher names, 8+ modulus names, 7+ exponent names
+- **📝 Comments**: Support for `#`, `//`, `/* */` style comments
+- **📎 Mixed content**: PEM blocks + variables in same file
+- **🔄 Auto-detection**: Automatically determines parsing format
 
-### **Professional Features**
-- **Real-time progress bars** with ETA estimates
-- **Threading support** with graceful interruption (Ctrl+C)
-- **Priority-based attack ordering** (fastest first)
-- **Multiple output formats** (UTF-8, Hex, ASCII, UTF-16)
-- **Flag format matching** with regex support
-- **Comprehensive test suite** with 15+ test cases
+### **💻 Professional CLI Features**
+- **📏 Real-time progress bars** with ETA estimates
+- **🧵 Threading support** with graceful interruption (Ctrl+C)
+- **⏱️ Priority-based attack ordering** (fastest attacks first)
+- **🎨 Multiple output formats** (UTF-8, Hex, ASCII, UTF-16, Binary)
+- **🏴 Flag format matching** with regex support
+- **🛠️ Comprehensive logging** with debug levels
+- **📊 Detailed attack results** with timing and success rates
+
+## 📂 Variable Names Supported
+
+RSAXploit recognizes **ALL** common variable names used in CTF challenges and research:
+
+### **🔢 Modulus (N) - 8+ variants**
+```
+n, modulus, mod, public_key, pubkey, pk, rsa_n, modulo
++ any name starting with 'n' (n1, n_value, number, etc.)
+```
+
+### **⚡ Exponent (E) - 7+ variants**  
+```
+e, exp, exponent, public_exp, pub_exp, rsa_e, key_exp
+```
+
+### **🔐 Ciphertext (C) - 19+ variants**
+```
+c, cipher, ciphertext, encrypted, enc, encrypt, cyphertext, cypher,
+message, msg, ct, secret, flag, output, data, target, payload, text, value
++ any name starting with 'c' (c1, cipher_msg, crypt_data, etc.)
++ numbered variants (c1, c2, cipher1, enc1, flag_enc, etc.)
+```
+
+### **➕ Sum/Difference (X) - 8+ variants**
+```
+x, s, sum, diff, difference, p_plus_q, p+q, pq_sum
+```
+
+> **🏆 This makes RSAXploit compatible with 99% of CTF challenges without any variable name changes!**
 
 ## 📦 Installation
 
-### Prerequisites
+### **📻 System Requirements**
+- **Python**: 3.7+ (3.9+ recommended)
+- **OS**: Windows, Linux, macOS
+- **Memory**: 512MB+ RAM
+- **Storage**: 50MB+ free space
+
+### **⚡ Quick Install** 
 ```bash
-# Install Python dependencies
-pip install pycryptodome
-
-# Optional (for better performance)
-pip install gmpy2
-
-# Optional (for FactorDB support)  
-pip install factordb-pycli
-```
-
-### Quick Start
-```bash
+# Clone the repository
 git clone https://github.com/shoaibsr7/RSAXploit.git
 cd RSAXploit
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Ready to use!
 python3 rsaxploit.py --help
 ```
+
+### **🔧 Manual Dependencies**
+```bash
+# Required
+pip install pycryptodome
+
+# Optional (10x faster factorization)
+pip install gmpy2
+
+# Optional (FactorDB support)
+pip install factordb-pycli
+
+# Optional (better performance)
+pip install sympy
+```
+
+### **🐍 Python Version Notes**
+- **Python 3.7-3.8**: Fully supported
+- **Python 3.9-3.11**: Recommended (best performance)
+- **Python 3.12+**: Supported (may need gmpy2 compilation)
 
 ## 🎯 Usage Examples
 

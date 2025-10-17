@@ -157,7 +157,13 @@ Desktop.ini
 
 # Test files
 test_*.txt
+cipher*.txt
 *.json
-*.pem
-ciphet.txt
+
+# Debug files
+debug_*.py
+debug_*.txt
 report.txt
+
+# Example files (keep public_key.pem as example)
+# *.pem
