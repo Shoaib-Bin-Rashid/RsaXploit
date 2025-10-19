@@ -2,7 +2,7 @@
 
 **The Ultimate RSA Attack Framework for CTF & Security Research**
 
-**Developed by Shoaib Bin Rashid (R3D\_XplOiT)**
+**Developed by Shoaib Bin Rashid (R3D_XplOiT)**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
@@ -17,6 +17,7 @@ RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed spe
 ## 🚀 Features
 
 ### **💪 Advanced Attack Arsenal**
+
 - **⚡ Small Root Attack** - When message^e < n
 - **🔮 Coppersmith Attack** - Stereotyped messages & polynomial roots
 - **💰 Wiener Attack** - Small private exponents (continued fractions)
@@ -34,6 +35,7 @@ RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed spe
 - **🏆 CTF Optimized** - Priority-based attack ordering
 
 ### **🌐 Ultra-Flexible Input Parsing**
+
 - **📁 Multiple formats**: PEM, JSON, key-value pairs, numbered variables
 - **⚔️ Any separator**: `=`, `:`, `->`, `=>`, `|`, spaces, tabs
 - **🔢 Number formats**: Decimal, hex (0x), binary (0b), octal (0o), base64, scientific
@@ -43,6 +45,7 @@ RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed spe
 - **🔄 Auto-detection**: Automatically determines parsing format
 
 ### **💻 Professional CLI Features**
+
 - **📏 Real-time progress bars** with ETA estimates
 - **🧵 Threading support** with graceful interruption (Ctrl+C)
 - **⏱️ Priority-based attack ordering** (fastest attacks first)
@@ -56,17 +59,20 @@ RSAXploit is a comprehensive, automated RSA cryptanalysis framework designed spe
 RSAXploit recognizes **ALL** common variable names used in CTF challenges and research:
 
 ### **🔢 Modulus (N) - 8+ variants**
+
 ```
 n, modulus, mod, public_key, pubkey, pk, rsa_n, modulo
 + any name starting with 'n' (n1, n_value, number, etc.)
 ```
 
-### **⚡ Exponent (E) - 7+ variants**  
+### **⚡ Exponent (E) - 7+ variants**
+
 ```
 e, exp, exponent, public_exp, pub_exp, rsa_e, key_exp
 ```
 
 ### **🔐 Ciphertext (C) - 19+ variants**
+
 ```
 c, cipher, ciphertext, encrypted, enc, encrypt, cyphertext, cypher,
 message, msg, ct, secret, flag, output, data, target, payload, text, value
@@ -75,6 +81,7 @@ message, msg, ct, secret, flag, output, data, target, payload, text, value
 ```
 
 ### **➕ Sum/Difference (X) - 8+ variants**
+
 ```
 x, s, sum, diff, difference, p_plus_q, p+q, pq_sum
 ```
@@ -84,12 +91,14 @@ x, s, sum, diff, difference, p_plus_q, p+q, pq_sum
 ## 📦 Installation
 
 ### **📻 System Requirements**
+
 - **Python**: 3.7+ (3.9+ recommended)
 - **OS**: Windows, Linux, macOS
 - **Memory**: 512MB+ RAM
 - **Storage**: 50MB+ free space
 
-### **⚡ Quick Install** 
+### **⚡ Quick Install**
+
 ```bash
 # Clone the repository
 git clone https://github.com/shoaibsr7/RSAXploit.git
@@ -103,6 +112,7 @@ python3 rsaxploit.py --help
 ```
 
 ### **🔧 Manual Dependencies**
+
 ```bash
 # Required
 pip install pycryptodome
@@ -118,6 +128,7 @@ pip install sympy
 ```
 
 ### **🐍 Python Version Notes**
+
 - **Python 3.7-3.8**: Fully supported
 - **Python 3.9-3.11**: Recommended (best performance)
 - **Python 3.12+**: Supported (may need gmpy2 compilation)
@@ -125,6 +136,7 @@ pip install sympy
 ## 🎯 Usage Examples
 
 ### Command Line
+
 ```bash
 # Basic usage
 python3 rsaxploit.py -n 143 -e 3 --decrypt 123
@@ -143,16 +155,18 @@ python3 rsaxploit.py --publickey pubkey.pem --decrypt ciphertext
 ```
 
 ### File Input (Ultimate Flexibility)
+
 ```bash
 # Any of these formats work:
 python3 rsaxploit.py challenge.txt
 ```
 
 **Supported file formats:**
+
 ```
 # Traditional format
 n = 143
-e = 3  
+e = 3
 ciphertext = 123
 
 # JSON format
@@ -181,13 +195,15 @@ flag_encrypted => 123
 ## 🧪 Testing
 
 Run the comprehensive test suite:
+
 ```bash
 ./test.sh
 ```
 
 The test suite validates:
+
 - All 14+ attack methods with real vulnerable RSA
-- Input parsing for multiple formats  
+- Input parsing for multiple formats
 - PEM file loading
 - Error handling and edge cases
 - UI components and progress display
@@ -198,7 +214,7 @@ The test suite validates:
 ╔════════════════════════════════════════════════════════════════╗
 ║                      R S A X p l O i T                         ║
 ║             Automated RSA Attack & CTF Framework               ║
-║            Author: Shoaib Bin Rashid (R3D_XplOiT)              ║  
+║            Author: Shoaib Bin Rashid (R3D_XplOiT)              ║
 ╚════════════════════════════════════════════════════════════════╝
 
 → small_root                   ✗ FAIL [0.00s]
@@ -208,21 +224,22 @@ The test suite validates:
 By:    trial_division
 ----------------------------------------
 UTF-8:  Hello World!
----------------------------------------- 
+----------------------------------------
 Hex:   48656c6c6f20576f726c6421
 p:     11
-q:     13  
+q:     13
 d:     107
 ```
 
 ## 🔧 Advanced Usage
 
 ### Attack-Specific Options
+
 ```bash
 # Verbose debugging
 python3 rsaxploit.py -n N -e E --decrypt C --verbosity DEBUG
 
-# Continue after first success  
+# Continue after first success
 python3 rsaxploit.py -n N -e E --decrypt C --no-stop
 
 # Custom timeout and limits
@@ -230,7 +247,9 @@ timeout 300 python3 rsaxploit.py -n N -e E --decrypt C
 ```
 
 ### Integration with CTF Platforms
+
 RSAXploit can parse challenges from:
+
 - CTFd exports
 - PicoCTF challenge files
 - Direct copy-paste from web pages
@@ -240,6 +259,7 @@ RSAXploit can parse challenges from:
 ## 🏗️ Architecture
 
 RSAXploit uses a modular attack framework:
+
 - **Base Attack Class** - Consistent interface for all attacks
 - **Priority System** - Fast attacks execute first
 - **Threading Engine** - Non-blocking UI with progress tracking
@@ -249,6 +269,7 @@ RSAXploit uses a modular attack framework:
 ## 🤝 Contributing
 
 Contributions welcome! Areas for improvement:
+
 - New attack methods (Boneh-Durfee, LSB Oracle, etc.)
 - Additional input formats
 - Performance optimizations
@@ -261,6 +282,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🏆 Recognition
 
 RSAXploit has been successfully used in:
+
 - CTF competitions worldwide
 - Security research and penetration testing
 - Cryptography education and training
@@ -268,15 +290,14 @@ RSAXploit has been successfully used in:
 
 ## 📧 Contact
 
-**Author**: Shoaib Bin Rashid (R3D_XplOiT)  
+**Author**: Shoaib Bin Rashid (R3D_XplOiT)
 
--   **LinkedIn:** [Shoaib Bin Rashid](https://www.linkedin.com/in/shoaib-bin-rashid/)
-    
--   **Email:** [shoaibbinrashid11@gmail.com](mailto:shoaibbinrashid11@gmail.com)
-    
--   **GitHub:** [Shoaib Bin Rashid](https://github.com/Shoaib-Bin-Rashid)
-    
--   **Twitter / X:** [@ShoaibBinRashi1](https://x.com/ShoaibBinRashi1)
+- **LinkedIn:** [Shoaib Bin Rashid](https://www.linkedin.com/in/shoaib-bin-rashid/)
+- **Email:** [shoaibbinrashid11@gmail.com](mailto:shoaibbinrashid11@gmail.com)
+- **GitHub:** [Shoaib Bin Rashid](https://github.com/Shoaib-Bin-Rashid)
+- **Twitter / X:** [@ShoaibBinRashi1](https://x.com/ShoaibBinRashi1)
+
+Do reach out for anything
 
 ---
 
